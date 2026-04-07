@@ -1,129 +1,92 @@
+-- Exploring covid_deaths dataset
 
-select * 
-from house_data_cleaning..NashVilleHousing
+select *
+from covid_data_exploration..CovidDeaths_edited$
 
--- standardise date format
+select location, date, total_cases, new_cases, total_deaths, population
+from covid_data_exploration..CovidDeaths_edited$
 
-ALTER TABLE house_data_cleaning..NashVilleHousing ADD SaleDateConverted DATE
+-- looking at total cases vs total deaths
 
-UPDATE house_data_cleaning..NashVilleHousing
-SET SaleDateConverted = CONVERT(DATE, SaleDate, 103) 
+select  location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as death_percentage 
+from covid_data_exploration..CovidDeaths_edited$
 
-select SaleDateConverted 
-from house_data_cleaning..NashVilleHousing
+-- shows likelihood of dying if you get corona virus in your country
 
+select  location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as death_percentage 
+from covid_data_exploration..CovidDeaths_edited$
+where location like '%egypt%'
 
--- populate property address data
+-- total cases vs population
+select  location, date, population, total_cases, (total_cases/population)*100 as infection_percentage_per_population 
+from covid_data_exploration..CovidDeaths_edited$
+where location like '%egypt%'
 
-select PropertyAddress 
-from house_data_cleaning..NashVilleHousing
+-- looking at countries with highest infection rate
 
-Select a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress, ISNULL(a.PropertyAddress,b.PropertyAddress)
-From house_data_cleaning..NashVilleHousing a
-JOIN house_data_cleaning..NashVilleHousing b
-	on a.ParcelID = b.ParcelID
-	AND a.[UniqueID ] <> b.[UniqueID ]
-Where a.PropertyAddress is null
+select  location, population, max(total_cases) as highest_infection_rate
+from covid_data_exploration..CovidDeaths_edited$
+group by location, population
+order by location
 
+select  location, sum(total_cases) as highest_infection_rate
+from covid_data_exploration..CovidDeaths_edited$
+group by location
+order by highest_infection_rate desc
 
-Update a
-SET PropertyAddress = ISNULL(a.PropertyAddress,b.PropertyAddress)
-From house_data_cleaning..NashVilleHousing a
-JOIN house_data_cleaning..NashVilleHousing b
-	on a.ParcelID = b.ParcelID
-	AND a.[UniqueID ] <> b.[UniqueID ]
-Where a.PropertyAddress is null
+select  location, date, max(total_cases) as highest_infection_rate
+from covid_data_exploration..CovidDeaths_edited$
+where location like '%egypt%'
+group by location, date
+order by highest_infection_rate desc
 
--- Breaking out Address into Individual Columns (Address, City, State)
+-- total death count
 
-SELECT
-SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1 ) as Address
-, SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) + 1 , LEN(PropertyAddress)) as Address
-From house_data_cleaning..NashVilleHousing
-
-ALTER TABLE house_data_cleaning..NashvilleHousing
-Add PropertySplitAddress Nvarchar(255)
-
-Update house_data_cleaning..NashVilleHousing
-SET PropertySplitAddress = SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1 )
-
-ALTER TABLE house_data_cleaning..NashVilleHousing
-Add PropertySplitCity Nvarchar(255)
-
-Update house_data_cleaning..NashVilleHousing
-SET PropertySplitCity = SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) + 1 , LEN(PropertyAddress))
+select location, max(total_deaths) as total_deaths_per_country
+from covid_data_exploration..CovidDeaths_edited$
+where total_deaths is not null
+group by location
+order by location
 
 
-Select OwnerAddress
-From house_data_cleaning..NashVilleHousing
 
-Select
-PARSENAME(REPLACE(OwnerAddress, ',', '.') , 3)
-,PARSENAME(REPLACE(OwnerAddress, ',', '.') , 2)
-,PARSENAME(REPLACE(OwnerAddress, ',', '.') , 1)
-From house_data_cleaning..NashVilleHousing
+-- Exploring CovidVaccination dataset
 
-ALTER TABLE house_data_cleaning..NashVilleHousing
-Add OwnerSplitAddress Nvarchar(255)
-
-Update house_data_cleaning..NashVilleHousing
-SET OwnerSplitAddress = PARSENAME(REPLACE(OwnerAddress, ',', '.') , 3)
-
-ALTER TABLE house_data_cleaning..NashVilleHousing
-Add OwnerSplitCity Nvarchar(255);
-
-Update house_data_cleaning..NashVilleHousing
-SET OwnerSplitCity = PARSENAME(REPLACE(OwnerAddress, ',', '.') , 2)
+select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations_smoothed
+from covid_data_exploration..CovidDeaths_edited$ as dea
+join covid_data_exploration..CovidVaccination$ as vac
+on dea.location = vac.location
+and dea.date = vac.date
 
 
-ALTER TABLE house_data_cleaning..NashVilleHousing
-Add OwnerSplitState Nvarchar(255);
-
-Update house_data_cleaning..NashVilleHousing
-SET OwnerSplitState = PARSENAME(REPLACE(OwnerAddress, ',', '.') , 1)
-
--- Change Y and N to Yes and No in "Sold as Vacant" field
-
-Select Distinct(SoldAsVacant), Count(SoldAsVacant)
-From house_data_cleaning..NashVilleHousing
-Group by SoldAsVacant
-order by 2
-
-Select SoldAsVacant
-, CASE When SoldAsVacant = 'Y' THEN 'Yes'
-	   When SoldAsVacant = 'N' THEN 'No'
-	   ELSE SoldAsVacant
-	   END
-From house_data_cleaning..NashVilleHousing
+Select SUM(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, SUM(cast(new_deaths as int))/SUM(New_Cases)*100 as DeathPercentage
+From covid_data_exploration..CovidDeaths_edited$
+--Where location like '%states%'
+where continent is not null 
+--Group By date
+order by 1,2
 
 
-Update house_data_cleaning..NashVilleHousing
-SET SoldAsVacant = CASE When SoldAsVacant = 'Y' THEN 'Yes'
-	   When SoldAsVacant = 'N' THEN 'No'
-	   ELSE SoldAsVacant
-	   END
--- Remove Duplicates
+-- We take these out as they are not inluded in the above queries and want to stay consistent
+-- European Union is part of Europe
 
-WITH RowNumCTE AS(
-Select *,
-	ROW_NUMBER() OVER (
-	PARTITION BY ParcelID,
-				 PropertyAddress,
-				 SalePrice,
-				 SaleDate,
-				 LegalReference
-				 ORDER BY
-					UniqueID
-					) row_num
+Select location, SUM(cast(new_deaths as int)) as TotalDeathCount
+From covid_data_exploration..CovidDeaths_edited$
+--Where location like '%states%'
+Where continent is null 
+and location not in ('World', 'European Union', 'International')
+Group by location
+order by TotalDeathCount desc
 
-From house_data_cleaning..NashVilleHousing )
-Select *
-From RowNumCTE
-Where row_num > 1
-Order by PropertyAddress
+Select Location, Population, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+From covid_data_exploration..CovidDeaths_edited$
+--Where location like '%states%'
+Group by Location, Population
+order by PercentPopulationInfected desc
 
+Select Location, Population,date, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+From covid_data_exploration..CovidDeaths_edited$
+--Where location like '%states%'
+Group by Location, Population, date
+order by PercentPopulationInfected desc
 
--- Delete Unused Columns
-
-ALTER TABLE house_data_cleaning..NashVilleHousing
-DROP COLUMN OwnerAddress, TaxDistrict, PropertyAddress, SaleDate
